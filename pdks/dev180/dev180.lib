@@ -1,0 +1,49 @@
+* dev180 -- BRING-UP MODELS ONLY. NOT A CALIBRATED PROCESS.
+*
+* Hand-written BSIM3v3.3 cards with parameters in the right ballpark for a
+* generic 180nm bulk CMOS process. They exist so the harness can be developed
+* and tested without a multi-gigabyte PDK download, and so CI has something
+* deterministic to run against.
+*
+* These are NOT foundry models. Threshold voltages, mobilities and capacitances
+* are approximate and uncorrelated with any real fab. `PDK.calibrated` is False
+* for this process and bias/bench.py refuses to emit publishable results with
+* it. Use sky130 or ihp-sg13g2 for anything you intend to report.
+
+.model nch nmos level=8 version=3.3.0
++ tnom=27 tox=4.1e-9 xj=1.0e-7 nch=2.3e17
++ vth0=0.39 k1=0.53 k2=0.029 k3=0.0
++ dvt0=1.3 dvt1=0.53 dvt2=-0.032
++ u0=280 ua=-1.2e-9 ub=2.3e-18 uc=5.6e-11
++ vsat=1.05e5 a0=1.0 ags=0.28 a1=0.0 a2=1.0
++ rdsw=250 prwg=0.5 prwb=0.0 wr=1.0
++ nfactor=1.1 cit=0.0 cdsc=2.4e-4 cdscd=0.0 cdscb=0.0
++ eta0=0.045 etab=-0.07 dsub=0.56
++ pclm=1.2 pdiblc1=0.24 pdiblc2=0.0088 pdiblcb=-0.005 drout=0.56
++ pscbe1=4.2e8 pscbe2=1.0e-5 pvag=0.0 delta=0.01
++ mobmod=1 prt=0.0 ute=-1.5
++ kt1=-0.11 kt1l=0.0 kt2=0.022 ua1=4.3e-9 ub1=-7.6e-18 uc1=-5.6e-11
++ at=3.3e4 wl=0.0 ww=0.0 wwl=0.0 ll=0.0 lw=0.0 lwl=0.0
++ capmod=2 xpart=0.5
++ cgdo=3.9e-10 cgso=3.9e-10 cgbo=1.0e-12
++ cj=1.0e-3 pb=0.8 mj=0.35 cjsw=2.0e-10 pbsw=0.8 mjsw=0.2
++ js=1.0e-8 jsw=0.0
+
+.model pch pmos level=8 version=3.3.0
++ tnom=27 tox=4.1e-9 xj=1.0e-7 nch=4.1e17
++ vth0=-0.42 k1=0.60 k2=-0.045 k3=0.0
++ dvt0=1.5 dvt1=0.55 dvt2=-0.032
++ u0=70 ua=1.4e-9 ub=1.0e-18 uc=-5.0e-11
++ vsat=1.05e5 a0=1.0 ags=0.20 a1=0.0 a2=1.0
++ rdsw=520 prwg=0.5 prwb=0.0 wr=1.0
++ nfactor=1.2 cit=0.0 cdsc=2.4e-4 cdscd=0.0 cdscb=0.0
++ eta0=0.06 etab=-0.06 dsub=0.60
++ pclm=1.4 pdiblc1=0.13 pdiblc2=0.0034 pdiblcb=-0.005 drout=0.60
++ pscbe1=4.2e8 pscbe2=1.0e-5 pvag=0.0 delta=0.01
++ mobmod=1 prt=0.0 ute=-1.5
++ kt1=-0.12 kt1l=0.0 kt2=0.021 ua1=4.3e-9 ub1=-7.6e-18 uc1=-5.6e-11
++ at=3.3e4 wl=0.0 ww=0.0 wwl=0.0 ll=0.0 lw=0.0 lwl=0.0
++ capmod=2 xpart=0.5
++ cgdo=3.5e-10 cgso=3.5e-10 cgbo=1.0e-12
++ cj=1.2e-3 pb=0.85 mj=0.40 cjsw=2.2e-10 pbsw=0.85 mjsw=0.25
++ js=1.0e-8 jsw=0.0

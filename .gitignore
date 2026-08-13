@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Fetched PDKs are never committed -- they belong to their foundries.
+pdks/sky130/
+pdks/ihp-sg13g2/
+
+# Benchmark output. Commit deliberately, not by accident.
+results/
+*.raw

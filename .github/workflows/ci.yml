@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ngspice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+          ngspice -v | head -2
+
+      - name: Install package
+        run: pip install -e '.[dev]'
+
+      - name: Test
+        run: pytest -q
+
+      # The reference sizing must keep simulating to the same physics. This
+      # catches an ngspice upgrade or a model edit silently changing results.
+      - name: Reference point still simulates
+        run: bias sim ota5t
+
+      # A spec nobody can satisfy is a broken benchmark. Cheap budget here --
+      # this checks the suite is wired up, not that every tier is reachable.
+      - name: Suite is wired up
+        run: |
+          bias list
+          bias solve ota5t-easy --with de --budget 60

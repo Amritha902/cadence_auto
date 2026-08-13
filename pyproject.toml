@@ -1,0 +1,27 @@
+[project]
+name = "bias"
+version = "0.1.0"
+description = "A reproducible benchmark for LLM-driven analog circuit sizing on open PDKs."
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.40"]
+opt = ["scipy>=1.11"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+bias = "bias.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["bias*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
