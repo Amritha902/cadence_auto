@@ -38,3 +38,10 @@ jobs:
         run: |
           bias list
           bias solve ota5t-easy --with de --budget 60
+
+      # Every synthesised cell must still match its truth table in simulation.
+      - name: Logic cells still verify
+        run: |
+          bias cells
+          bias build "half adder" --no-llm
+          bias build "full adder" --no-llm

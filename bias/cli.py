@@ -53,6 +53,24 @@ def main(argv: list[str] | None = None) -> int:
         "--trace", action="store_true", help="print each candidate as it is tried"
     )
 
+    p_build = sub.add_parser(
+        "build", help="describe a circuit in words; get a verified netlist and symbol"
+    )
+    p_build.add_argument("request", help='e.g. "build me a half adder symbol"')
+    p_build.add_argument("--pdk", default="dev180")
+    p_build.add_argument("--out", default=None,
+                         help="directory for netlist, symbol, testbench, truth table")
+    p_build.add_argument("--wn", type=float, default=1.0e-6,
+                         help="NMOS width for synthesised logic (m)")
+    p_build.add_argument("--beta", type=float, default=2.5,
+                         help="PMOS/NMOS width ratio")
+    p_build.add_argument("--no-llm", action="store_true",
+                         help="deterministic matching only; never call a model")
+
+    p_cells = sub.add_parser("cells", help="list the logic cells that can be built")
+    p_cells.add_argument("--truth", metavar="CELL", default=None,
+                         help="print one cell's reference truth table")
+
     p_bench = sub.add_parser("bench", help="run the full matrix and write a report")
     p_bench.add_argument("--specs", nargs="*", default=None)
     p_bench.add_argument(
@@ -85,6 +103,10 @@ def _dispatch(args) -> int:
         return _cmd_solve(args)
     if args.command == "bench":
         return _cmd_bench(args)
+    if args.command == "build":
+        return _cmd_build(args)
+    if args.command == "cells":
+        return _cmd_cells(args)
     return 1
 
 
@@ -201,6 +223,52 @@ def _cmd_solve(args) -> int:
     print("\nmeasured:")
     print(spec.report(best.measured))
     return 0 if ev.solved() else 1
+
+
+def _cmd_build(args) -> int:
+    from . import design, logic
+
+    process = _resolve_pdk(args.pdk)
+    sizing = logic.Sizing(wn=args.wn, beta=args.beta)
+
+    try:
+        result = design.build(
+            args.request,
+            process,
+            outdir=args.out,
+            sizing=sizing,
+            use_llm=not args.no_llm,
+        )
+    except LookupError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(result.describe())
+    return 0 if result.ok else 1
+
+
+def _cmd_cells(args) -> int:
+    from . import logic
+
+    if args.truth:
+        rows = logic.truth_table(args.truth)
+        ins = list(rows[0][0])
+        outs = list(rows[0][1])
+        print("  " + " ".join(f"{i:>3}" for i in ins) + "  |  "
+              + "  ".join(f"{o:>6}" for o in outs))
+        for inputs, expected in rows:
+            print("  " + " ".join(f"{inputs[i]:>3}" for i in ins) + "  |  "
+                  + "  ".join(f"{expected[o]:>6}" for o in outs))
+        return 0
+
+    print("LOGIC CELLS")
+    for name in sorted(logic.CELLS):
+        builder, ins, outs, _ = logic.get(name)
+        circuit = builder()
+        print(f"  {name:<12} {len(circuit.transistors()):>3}T   "
+              f"in: {','.join(ins):<12} out: {','.join(outs)}")
+    print("\nBuild one with:  bias build \"half adder\" --out ./out")
+    return 0
 
 
 def _cmd_bench(args) -> int:

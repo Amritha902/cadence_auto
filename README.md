@@ -1,35 +1,43 @@
 # bias
 
-**A reproducible benchmark for LLM-driven analog circuit sizing.**
+**Describe a circuit, get a verified one. And an honest benchmark for whether
+language models can size analog circuits at all.**
 
-Language models can size analog circuits. Several recent papers show it working
-— [EEsizer](https://arxiv.org/abs/2509.25510),
+Two halves of the same problem, sharing one structured circuit representation.
+
+**Building.** Say "build me a half adder symbol" and get a transistor-level
+netlist, a schematic symbol, a testbench, and a truth table *proved by
+transient simulation* — not asserted. Static CMOS logic is synthesised
+deterministically, so the transistors are correct by construction.
+
+**Benchmarking.** A reproducible suite for LLM-driven analog sizing. Several
+papers show LLM sizing working — [EEsizer](https://arxiv.org/abs/2509.25510),
 [LEDRO](https://arxiv.org/html/2411.12930),
-[AutoSizer](https://arxiv.org/abs/2602.02849). What the literature is missing is
-a shared, runnable baseline: each paper uses its own topologies, its own PDK,
-its own success criterion, and mostly its own simulator setup. You cannot
-compare two results, and you usually cannot rerun either.
-
-`bias` asks one question honestly:
-
-> Given a topology, a specification, and a fixed simulation budget, can a
-> language model size an analog circuit better than the classical optimizers a
-> designer could already have run for free?
+[AutoSizer](https://arxiv.org/abs/2602.02849) — but each uses its own
+topologies, PDK and success criterion, so no two results can be compared and
+most cannot be rerun. This is the shared runnable baseline, with classical
+optimizers implemented to win.
 
 Everything runs on open PDKs with ngspice. No commercial licence, no NDA, no
-cloud. Clone it and reproduce the numbers.
+cloud.
 
 ---
 
 ## Quickstart
 
 ```bash
-git clone <this repo> && cd bias
+git clone https://github.com/Amritha902/cadence_auto.git && cd cadence_auto
 python3 -m venv .venv && .venv/bin/pip install -e '.[llm,dev]'
 brew install ngspice      # or: apt install ngspice
 ```
 
-Simulate one sizing:
+Build a circuit from a description:
+
+```bash
+.venv/bin/bias build "build me a half adder" --out ./out
+```
+
+Simulate one analog sizing:
 
 ```bash
 .venv/bin/bias sim ota5t
@@ -53,6 +61,95 @@ The full matrix:
 ```bash
 .venv/bin/bias bench --seeds 5 --budget 200
 ```
+
+---
+
+## Building circuits from a description
+
+```bash
+bias cells                                    # what can be built
+bias build "build me a half adder" --out ./out
+```
+
+```
+request : "build me a half adder"
+resolved: half_adder  (matched cell name)
+built   : half_adder: 9 nmos, 9 pmos; 13 nets
+          18 transistors, structurally valid
+verified: VERIFIED against the truth table by transient simulation
+
+    a   b  |    sum   carry   |   sum(V)  carry(V)
+  ---------------------------------------------------
+    0   0  |      0       0   |    0.000     0.000   ok
+    0   1  |      1       0   |    1.800     0.000   ok
+    1   0  |      1       0   |    1.800     0.000   ok
+    1   1  |      0       1   |    0.000     1.800   ok
+
+worst output rail error: 0.00% of VDD
+```
+
+Four artifacts land in `./out`: the netlist, an SVG schematic symbol, the
+transient testbench, and the truth table.
+
+### Why it does not hallucinate
+
+The usual way to build this is to ask a language model for SPICE. It returns
+text that looks right and does not simulate — floating nodes, a MOSFET with
+three terminals, a net referenced once. Nothing notices until ngspice fails,
+and the error is about line 14 rather than about the circuit.
+
+So the model never writes a netlist here. The split is:
+
+| step | who does it |
+| --- | --- |
+| decide *what* to build | model (or a lookup, which is tried first) |
+| build the transistors | deterministic synthesis in `logic.py` |
+| check it is a circuit | `netlist.py` validator |
+| prove it works | ngspice transient vs. the truth table |
+
+A wrong answer is therefore a wrong *choice*, not a broken circuit — and the
+last step catches even that.
+
+Resolution is deterministic first and reaches for a model only on requests the
+alias table does not cover. For the circuits people actually ask for, a lookup
+is exact, instant, free, and cannot hallucinate.
+
+### The validator
+
+`Circuit.validate()` catches what breaks generated netlists, and reports it in
+electrical terms rather than SPICE terms:
+
+- a MOSFET missing its bulk terminal, or carrying an invented one
+- a transistor with no W or L
+- a net connected to exactly one terminal — floating, which ngspice reports as
+  a singular matrix
+- a device with both ends on the same net
+- an island of nets with no conductive path to ground
+- duplicate instance names, which SPICE silently overwrites
+
+### Cells
+
+| cell | transistors | notes |
+| --- | --- | --- |
+| `inverter` | 2 | |
+| `nand2` | 4 | series NMOS widened by stack depth |
+| `nor2` | 4 | series PMOS widened by stack depth |
+| `xor2` | 16 | four NAND2, every node actively driven |
+| `half_adder` | 18 | carry reuses the XOR's first NAND |
+| `full_adder` | 50 | two half adders and an OR |
+
+The half adder is 18 transistors rather than 20 because `NAND(a,b)` is already
+computed inside the XOR, so the carry costs one inverter instead of a whole AND
+gate.
+
+### Circuit identity
+
+`Circuit.graph_hash()` fingerprints topology via Weisfeiler-Lehman refinement
+over the device/net graph. Two circuits hash equal when they are the same
+topology under any renaming of internal nets and devices — but supply and
+ground nets are labelled distinctly, because swapping VDD for an internal node
+is a different circuit even when the graph shape is identical.
+
 
 ---
 
@@ -256,6 +353,11 @@ bias/
   evaluate.py     the single evaluation path -- budget counting lives here
   optimizers.py   classical baselines
   agent.py        the LLM agent
+  netlist.py      circuit IR: validation, emission, graph identity
+  logic.py        deterministic static-CMOS synthesis
+  verify.py       truth-table proof by transient simulation
+  symbol.py       SVG schematic symbols
+  design.py       natural language -> verified circuit
   specs.py        the frozen benchmark suite
   bench.py        the harness
 scripts/
