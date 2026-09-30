@@ -12,8 +12,10 @@ collected; topologies agree to print exactly the metric names their Spec uses.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -71,21 +73,46 @@ def run_deck(deck: str, timeout: float = 30.0, keep_dir: Path | None = None) -> 
     deck_path = workdir / "deck.sp"
     deck_path.write_text(deck)
 
+    # Deliberately not subprocess.run(..., timeout=): on timeout it kills only
+    # the direct child and then calls communicate() again to drain the pipes.
+    # If anything still holds the write end open -- a grandchild, or ngspice
+    # itself mid-teardown -- that second call blocks forever and the timeout is
+    # silently defeated. A long benchmark then hangs with no simulator running
+    # and no CPU burned, which is exactly as confusing as it sounds.
+    #
+    # Instead the child gets its own process group, and on timeout the whole
+    # group is killed so no descendant can keep the pipe alive.
+    stdout = stderr = ""
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             [NGSPICE, "-b", str(deck_path)],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             text=True,
-            timeout=timeout,
             cwd=workdir,
+            start_new_session=True,
         )
-    except subprocess.TimeoutExpired:
-        return SimResult(ok=False, reason=f"ngspice timed out after {timeout}s")
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_group(proc)
+            try:
+                stdout, stderr = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout = stderr = ""
+            return SimResult(
+                ok=False,
+                stdout=stdout or "",
+                stderr=stderr or "",
+                reason=f"ngspice timed out after {timeout}s",
+            )
     finally:
         if keep_dir is None:
             shutil.rmtree(workdir, ignore_errors=True)
 
-    out = proc.stdout + "\n" + proc.stderr
+    out = (stdout or "") + "\n" + (stderr or "")
     failed = set(_FAILED_MEAS.findall(out))
     values: dict[str, float] = {}
     for name, raw in _SCALAR.findall(out):
@@ -109,8 +136,19 @@ def run_deck(deck: str, timeout: float = 30.0, keep_dir: Path | None = None) -> 
     return SimResult(
         ok=ok,
         values=values,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
-        returncode=proc.returncode,
+        stdout=stdout or "",
+        stderr=stderr or "",
+        returncode=proc.returncode or 0,
         reason=reason,
     )
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    """Kill the child and every descendant it started."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
