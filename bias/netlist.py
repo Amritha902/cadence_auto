@@ -268,10 +268,17 @@ class Circuit:
 
     # -- emission -------------------------------------------------------
 
-    def to_spice(self, models: dict[str, str] | None = None) -> str:
-        """Render device lines. `models` maps Kind values to model card names,
-        so the same circuit emits against any PDK."""
+    def to_spice(self, models: dict[str, str] | None = None, pdk=None) -> str:
+        """Render device lines.
+
+        Pass `pdk` so transistors are instantiated the way that process
+        expects -- an "M" instance naming a .model card, or an "X" instance
+        naming a .subckt, which is what foundry PDKs almost always ship. The
+        bare `models` mapping remains for callers that only need names.
+        """
         models = models or {}
+        if pdk is not None and not models:
+            models = {"nmos": pdk.nmos, "pmos": pdk.pmos}
         lines: list[str] = []
         if self.comment:
             lines.append(f"* {self.comment}")
@@ -280,6 +287,14 @@ class Circuit:
             nets = " ".join(d.nets[t] for t in TERMINALS[d.kind])
 
             if d.kind in MOS_KINDS:
+                if pdk is not None:
+                    lines.append(pdk.mos_line(
+                        d.instance,
+                        d.nets["d"], d.nets["g"], d.nets["s"], d.nets["b"],
+                        d.kind.value,
+                        float(d.params["W"]), float(d.params["L"]),
+                    ))
+                    continue
                 model = models.get(d.kind.value, d.kind.value)
                 params = " ".join(
                     f"{k}={_num(v)}" for k, v in d.params.items()

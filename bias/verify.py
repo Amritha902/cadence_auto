@@ -108,7 +108,7 @@ def build_deck(
         lines.append(f"V{port} {port} 0 PWL({pwl})")
 
     # The circuit itself.
-    lines.append(circuit.to_spice({"nmos": pdk.nmos, "pmos": pdk.pmos}))
+    lines.append(circuit.to_spice(pdk=pdk))
 
     # Every output needs a load, or it drives nothing and the node is floating
     # as far as the validator is concerned.

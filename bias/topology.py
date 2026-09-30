@@ -190,13 +190,8 @@ def _mos(
     is estimated as a contacted source/drain of 2.5*Lmin, which is the usual
     rule of thumb and is what a layout would actually give you.
     """
-    hdif = 2.5 * pdk.lmin
-    ad = w * hdif
-    pd = 2 * (w + hdif)
-    return (
-        f"{inst} {d} {g} {s} {b} {model} W={w:g} L={l:g} "
-        f"AD={ad:g} AS={ad:g} PD={pd:g} PS={pd:g}"
-    )
+    kind = "nmos" if model == pdk.nmos else "pmos"
+    return pdk.mos_line(inst, d, g, s, b, kind, w, l)
 
 
 def _drive(vdd: float, tb: Testbench) -> str:

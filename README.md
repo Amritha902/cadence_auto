@@ -364,21 +364,49 @@ require, and it is why this design would survive contact with a foundry NDA.
 No PDK content is vendored here.
 
 ```bash
-scripts/fetch_pdk.sh ihp-sg13g2    # IHP SG13G2 130nm BiCMOS
-scripts/fetch_pdk.sh sky130        # SkyWater 130nm
+scripts/fetch_pdk.sh sky130        # SkyWater 130nm -- works out of the box
 ```
 
-`dev180` is a small hand-written BSIM3v3 card used to bring the harness up and
-to give CI something deterministic. **It is not a calibrated process** — the
-parameters are plausible for generic 180 nm bulk CMOS but correspond to no real
-fab. `bench` refuses to present its output as publishable, and you should
-treat any number from it as a smoke test.
+**sky130 is the real target and it runs.** Both topologies and all six logic
+cells simulate against SkyWater's BSIM4 primitives, which is why it is
+preferred over IHP here: BSIM4 is built into ngspice, so there is no compiled
+model to obtain or build.
 
-Adding a PDK is a config entry: model file, device names, VDD, minimum
-geometry. Pointing this at a proprietary PDK behind a company firewall is the
-same change.
+Two things were needed to get there, and both are worth knowing if you fetch
+it yourself:
 
----
+- **The primitives are `.subckt` wrappers**, so they take an `X` instance with
+  lowercase `w`/`l`, not an `M` instance naming a `.model`. Getting this wrong
+  produces a netlist ngspice parses and silently mis-simulates, so device
+  instantiation is a property of the PDK (`PDK.mos_line`) rather than of the
+  topology.
+- **Only `nfet_01v8` and `pfet_01v8` are included**, not the whole `tt`
+  section. That section also pulls in 5V and ESD models, several written with
+  a bare `include` that ngspice reads as a current source and dies on — the
+  reason the usual advice is to build sky130 through open_pdks first.
+  Including just the primitives in use avoids that entirely and parses faster.
+
+`pdks/sky130_nominal.spice` (42 lines, tracked here) supplies the 27
+statistical slope parameters the `tt` models reference in `{}` expressions but
+which nothing in the sky130 repository defines for ngspice — an open_pdks
+build provides them from a top-level file. Setting them to zero *is* the
+nominal corner.
+
+**IHP SG13G2 is registered but does not run.** Its devices are PSP 103.6,
+which ngspice can only load as a compiled OSDI shared object, and the upstream
+repository ships no `osdi/` directory — the binaries have to be built with
+OpenVAF per platform first. That is a portability cost a reproducible
+benchmark should not take on, so sky130 is the supported path.
+
+**`dev180` is a hand-written BSIM3v3 card** used to bring the harness up and
+give CI something fast and deterministic. It is **not a calibrated process** —
+the parameters are plausible for generic 180nm bulk CMOS and correspond to no
+real fab. `bench` refuses to present its output as publishable. Use sky130 for
+anything you intend to report.
+
+Adding a PDK is a config entry: model files, device names, instantiation
+style, VDD, minimum geometry. Pointing this at a proprietary PDK behind a
+company firewall is the same change.
 
 ## Limitations
 

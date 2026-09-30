@@ -1,0 +1,42 @@
+* Nominal-corner shim for the SkyWater sky130 primitives.
+*
+* The mismatch corner files declare statistical variation in Spectre's
+* `vary ... dist=gauss` syntax, which ngspice does not read, but the tt
+* models still reference the underlying slope parameters in {} expressions.
+* Nothing in the sky130_fd_pr repository defines them for ngspice -- an
+* open_pdks build supplies them from a top-level file -- so without this
+* ngspice aborts with "Cannot compute substitute" before the first
+* operating point.
+*
+* Setting them to zero IS the nominal corner: zero statistical deviation
+* from the typical model. That is exactly what this benchmark simulates.
+* Monte Carlo mismatch would require driving these from a distribution,
+* which is listed as a known limitation in the README.
+
+.param sky130_fd_pr__nfet_01v8__toxe_slope = 0
+.param sky130_fd_pr__nfet_01v8__toxe_slope_spectre = 0
+.param sky130_fd_pr__nfet_01v8__voff_slope = 0
+.param sky130_fd_pr__nfet_01v8__voff_slope_spectre = 0
+.param sky130_fd_pr__nfet_01v8__vth0_slope = 0
+.param sky130_fd_pr__nfet_01v8__vth0_slope1 = 0
+.param sky130_fd_pr__nfet_01v8__vth0_slope_spectre = 0
+.param sky130_fd_pr__pfet_01v8__ku0_diff = 0
+.param sky130_fd_pr__pfet_01v8__kvsat_diff = 0
+.param sky130_fd_pr__pfet_01v8__kvth0_diff = 0
+.param sky130_fd_pr__pfet_01v8__lku0_diff = 0
+.param sky130_fd_pr__pfet_01v8__lkvth0_diff = 0
+.param sky130_fd_pr__pfet_01v8__nfactor_slope = 0
+.param sky130_fd_pr__pfet_01v8__nfactor_slope1 = 0
+.param sky130_fd_pr__pfet_01v8__nfactor_slope_spectre = 0
+.param sky130_fd_pr__pfet_01v8__toxe_slope = 0
+.param sky130_fd_pr__pfet_01v8__toxe_slope1 = 0
+.param sky130_fd_pr__pfet_01v8__toxe_slope_spectre = 0
+.param sky130_fd_pr__pfet_01v8__voff_slope = 0
+.param sky130_fd_pr__pfet_01v8__voff_slope1 = 0
+.param sky130_fd_pr__pfet_01v8__voff_slope_spectre = 0
+.param sky130_fd_pr__pfet_01v8__vth0_slope = 0
+.param sky130_fd_pr__pfet_01v8__vth0_slope1 = 0
+.param sky130_fd_pr__pfet_01v8__vth0_slope_spectre = 0
+.param sky130_fd_pr__pfet_01v8__wku0_diff = 0
+.param sky130_fd_pr__pfet_01v8__wkvth0_diff = 0
+.param sky130_fd_pr__pfet_01v8__wlod_diff = 0

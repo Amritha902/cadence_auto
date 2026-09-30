@@ -5,7 +5,7 @@ strongest classical baseline at a generous budget on each spec and reports
 whether it was solved and how many simulations it took. Use the output to
 retune specs.py -- targets should be reachable but not trivial.
 
-    .venv/bin/python scripts/calibrate.py [budget] [seeds]
+    .venv/bin/python scripts/calibrate.py [budget] [seeds] [pdk]
 """
 
 from __future__ import annotations
@@ -21,8 +21,9 @@ from bias.evaluate import Evaluator
 def main() -> int:
     budget = int(sys.argv[1]) if len(sys.argv) > 1 else 800
     n_seeds = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+    pdk_name = sys.argv[3] if len(sys.argv) > 3 else "dev180"
 
-    process = pdk.DEV180
+    process = pdk.DEV180 if pdk_name == "dev180" else pdk.get(pdk_name)
     tb = topology.Testbench(cl=1e-12)
 
     print(f"calibrating with de, budget={budget}, seeds={n_seeds}, pdk={process.name}\n")

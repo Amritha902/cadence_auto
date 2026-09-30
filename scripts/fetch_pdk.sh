@@ -30,10 +30,18 @@ case "$TARGET" in
       https://github.com/google/skywater-pdk-libs-sky130_fd_pr.git "$DEST"
     git -C "$DEST" sparse-checkout set models cells
     echo
-    echo "Fetched to $DEST"
-    echo "NOTE: sky130 ships models as a tree of .spice includes. If"
-    echo "bias.pdk.SKY130's .lib path does not resolve, point it at the"
-    echo "top-level corner file inside $DEST/models/."
+    echo "Fetched to $DEST (~780MB)"
+    echo
+    echo "bias includes only nfet_01v8 and pfet_01v8 rather than the whole"
+    echo "'tt' library section. That section also pulls in the 5V and ESD"
+    echo "models, several of which are written with a bare 'include' that"
+    echo "ngspice parses as a current source and dies on -- which is why the"
+    echo "usual advice is to build sky130 through open_pdks first. Including"
+    echo "only the primitives in use avoids that and parses faster."
+    echo
+    echo "pdks/sky130_nominal.spice (tracked in this repo) defines the"
+    echo "statistical slope parameters the tt models reference but nothing"
+    echo "here defines. Zero is the nominal corner."
     ;;
 
   ihp|ihp-sg13g2)
@@ -52,6 +60,13 @@ case "$TARGET" in
     rm -rf "$DEST.tmp"
     echo
     echo "Fetched to $DEST"
+    echo
+    echo "WARNING: these are PSP 103.6 models, which ngspice can only load as"
+    echo "a compiled OSDI shared object. The upstream repository ships no"
+    echo "osdi/ directory, so you must build psp103.osdi with OpenVAF for"
+    echo "your platform before this PDK will simulate. sky130 is BSIM4 and"
+    echo "needs no compiled models -- prefer it unless you specifically need"
+    echo "SG13G2."
     ;;
 
   "")
