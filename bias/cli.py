@@ -66,6 +66,12 @@ def main(argv: list[str] | None = None) -> int:
                          help="PMOS/NMOS width ratio")
     p_build.add_argument("--no-llm", action="store_true",
                          help="deterministic matching only; never call a model")
+    p_build.add_argument("--budget", type=int, default=400,
+                         help="simulations per attempt, for analog requests")
+    p_build.add_argument("--attempts", type=int, default=3,
+                         help="restarts before giving up, for analog requests")
+    p_build.add_argument("--with", dest="optimizer", default="de",
+                         help="optimizer for analog sizing (de, nelder-mead, llm, ...)")
 
     p_cells = sub.add_parser("cells", help="list the logic cells that can be built")
     p_cells.add_argument("--truth", metavar="CELL", default=None,
@@ -232,12 +238,15 @@ def _cmd_build(args) -> int:
     sizing = logic.Sizing(wn=args.wn, beta=args.beta)
 
     try:
-        result = design.build(
+        result = design.build_any(
             args.request,
             process,
             outdir=args.out,
-            sizing=sizing,
             use_llm=not args.no_llm,
+            sizing=sizing,
+            budget=args.budget,
+            attempts=args.attempts,
+            optimizer=args.optimizer,
         )
     except LookupError as exc:
         print(f"error: {exc}", file=sys.stderr)

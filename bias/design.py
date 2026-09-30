@@ -179,3 +179,239 @@ def build(
 def _write(path: Path, text: str) -> Path:
     path.write_text(text)
     return path
+
+
+# ---------------------------------------------------------------------------
+# Analog: a spoken specification, sized against the simulator
+# ---------------------------------------------------------------------------
+
+# Measured ceilings, not guesses. Calibration found the 5T OTA tops out near
+# 49 dB once phase margin is held at 60 deg -- it buys gain with channel
+# length, and length costs stability. Above that the request needs two stages.
+# See the calibration note in specs.py.
+OTA5T_GAIN_CEILING_DB = 48.0
+MILLER_GAIN_CEILING_DB = 80.0
+
+
+@dataclass
+class SizeResult:
+    request: str
+    topology_name: str
+    parsed: "object"                 # specparse.ParsedSpec
+    solved: bool
+    sims_used: int
+    sims_to_target: int | None
+    values: dict[str, float]
+    measured: dict[str, float]
+    why_topology: str = ""
+    infeasible: str = ""
+    files: dict[str, Path] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return self.solved
+
+    def describe(self) -> str:
+
+        lines = [
+            f'request : "{self.request}"',
+            "targets :",
+            self.parsed.describe(),
+            f"topology: {self.topology_name}  ({self.why_topology})",
+        ]
+        if self.infeasible:
+            lines += ["", f"NOT ATTEMPTED: {self.infeasible}"]
+            return "\n".join(lines)
+
+        lines.append("")
+        if self.solved:
+            lines.append(f"SIZED: all targets met after "
+                         f"{self.sims_to_target} simulations "
+                         f"({self.sims_used} used in total)")
+        else:
+            lines.append(f"NOT MET after {self.sims_used} simulations; "
+                         f"closest result below")
+
+        lines.append("")
+        lines.append("sizing:")
+        for k, v in self.values.items():
+            lines.append(f"  {k:<8} {_fmt(v)}")
+
+        lines.append("")
+        lines.append("measured:")
+        lines.append(self.parsed.spec.report(self.measured))
+
+        if self.files:
+            lines.append("")
+            for what, path in self.files.items():
+                lines.append(f"  {what:<9} {path}")
+        return "\n".join(lines)
+
+
+def choose_topology(gain_db: float | None) -> tuple[str, str]:
+    """Pick the cheapest topology that can reach the requested gain.
+
+    A single stage is preferred when it will do: fewer devices, no
+    compensation network, and unconditional stability. The threshold is the
+    measured 5T ceiling rather than a rule of thumb.
+    """
+    if gain_db is None:
+        return "ota5t", "no gain target given; starting from the single stage"
+    if gain_db <= OTA5T_GAIN_CEILING_DB:
+        return "ota5t", (
+            f"{gain_db:.0f}dB is within the single-stage ceiling "
+            f"(~{OTA5T_GAIN_CEILING_DB:.0f}dB measured at 60deg phase margin)"
+        )
+    return "miller", (
+        f"{gain_db:.0f}dB exceeds the single-stage ceiling "
+        f"(~{OTA5T_GAIN_CEILING_DB:.0f}dB), so a two-stage amplifier is needed"
+    )
+
+
+def size(
+    request: str,
+    pdk: PDK,
+    *,
+    budget: int = 400,
+    seed: int = 0,
+    attempts: int = 3,
+    optimizer: str = "de",
+    outdir: Path | None = None,
+    use_llm: bool = True,
+) -> SizeResult:
+    """Parse a spoken spec, choose a topology, and size it against ngspice."""
+    import numpy as np
+
+    from . import optimizers, plot, specparse, topology as topo_registry
+    from .evaluate import Evaluator
+    from .topology import Testbench
+
+    parsed = specparse.parse(request)
+    best_so_far = None
+    gain_db = parsed.found.get("gain")
+    topo_name, why = choose_topology(gain_db)
+    topo = topo_registry.get(topo_name)
+
+    # Refuse a request no topology here can reach, rather than burning a
+    # budget discovering it. Being told "this needs a different topology" is
+    # more useful than a near miss with no explanation.
+    if gain_db is not None and gain_db > MILLER_GAIN_CEILING_DB:
+        return SizeResult(
+            request, topo_name, parsed, False, 0, None, {}, {}, why,
+            infeasible=(
+                f"{gain_db:.0f}dB is beyond what either topology here reaches "
+                f"(~{MILLER_GAIN_CEILING_DB:.0f}dB for the two-stage). "
+                "That needs gain boosting or a third stage."
+            ),
+        )
+
+    tb = Testbench(cl=parsed.cl or 1e-12)
+    name = "llm" if (optimizer in ("llm", "agent") and use_llm) else optimizer
+
+    # Restart from a fresh seed rather than spending one long run. These
+    # objectives have wide flat regions where a population collapses early,
+    # and a second start is worth more than a longer first one. Successes
+    # stop immediately, so the extra attempts only cost time on hard specs.
+    ev = None
+    total_sims = 0
+    for attempt in range(max(1, attempts)):
+        ev = Evaluator(topo, pdk, parsed.spec, tb, budget=budget,
+                       stop_on_success=True)
+        optimizers.get(name).run(ev, np.random.default_rng(seed + attempt))
+        total_sims += ev.used
+        if ev.solved():
+            break
+        if best_so_far is None or (ev.best and ev.best.score < best_so_far.score):
+            best_so_far = ev.best
+
+    best = ev.solved() or (
+        min((x for x in (ev.best, best_so_far) if x), key=lambda e: e.score)
+    )
+    values = best.values if best else {}
+    measured = best.measured if best else {}
+
+    files: dict[str, Path] = {}
+    if outdir and best:
+        outdir = Path(outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        stem = topo_name
+
+        deck = topo.deck(pdk, values, tb)
+        files["testbench"] = _write(outdir / f"{stem}_sized.sp", deck + "\n")
+
+        sym = symbol.Symbol(
+            name=stem,
+            inputs=["vinp", "vinn"],
+            outputs=["vout"],
+            power=["vdd"],
+            ground=["0"],
+            subtitle=f"{len(topo.params)} sized parameters",
+        )
+        files["symbol"] = _write(outdir / f"{stem}.svg", sym.render())
+
+        files["report"] = _write(
+            outdir / f"{stem}_result.txt",
+            parsed.spec.report(measured) + "\n",
+        )
+
+        bode = plot.bode(topo, pdk, values, tb, measured)
+        if bode:
+            files["bode"] = _write(outdir / f"{stem}_bode.svg", bode)
+
+    return SizeResult(
+        request, topo_name, parsed,
+        solved=ev.solved() is not None,
+        sims_used=total_sims,
+        sims_to_target=ev.sims_to_target(),
+        values=values,
+        measured=measured,
+        why_topology=why,
+        files=files,
+    )
+
+
+def _fmt(v: float) -> str:
+    from .spec import _eng
+    return _eng(v)
+
+
+# ---------------------------------------------------------------------------
+
+
+def build_any(
+    request: str,
+    pdk: PDK,
+    *,
+    outdir: Path | None = None,
+    use_llm: bool = True,
+    **kwargs,
+):
+    """One entry point for both halves.
+
+    Digital first: a named cell is an exact, instant match and cannot be
+    confused for anything else. Only if no cell matches is the request read as
+    an analog specification, which is the case that needs numbers and units.
+    """
+    from . import specparse
+
+    try:
+        cell, _how = resolve(request, use_llm=False)
+    except LookupError:
+        cell = None
+
+    if cell:
+        sizing = kwargs.get("sizing")
+        return build(request, pdk, outdir=outdir, sizing=sizing, use_llm=use_llm)
+
+    try:
+        specparse.parse(request)
+    except ValueError as exc:
+        raise LookupError(
+            f"{exc}\n\nOr name a logic cell: "
+            f"{', '.join(sorted(logic.CELLS))}"
+        ) from exc
+
+    return size(
+        request, pdk, outdir=outdir, use_llm=use_llm,
+        **{k: v for k, v in kwargs.items() if k != "sizing"},
+    )

@@ -53,6 +53,11 @@ class Evaluator:
     testbench: Testbench = field(default_factory=Testbench)
     budget: int = 100
     timeout: float = 30.0
+    # Benchmarking wants the whole budget spent so every optimizer is
+    # measured over the same number of simulations. Building wants to stop
+    # the moment the spec is met -- there is nothing to learn from the
+    # remaining 395 runs once the circuit is good enough.
+    stop_on_success: bool = False
 
     history: list[Evaluation] = field(default_factory=list)
     _cache: dict[tuple, Evaluation] = field(default_factory=dict, repr=False)
@@ -64,6 +69,8 @@ class Evaluator:
 
     @property
     def exhausted(self) -> bool:
+        if self.stop_on_success and self.solved() is not None:
+            return True
         return self.used >= self.budget
 
     @property
@@ -104,6 +111,9 @@ class Evaluator:
             self.history.append(hit)
             return hit
 
+        if self.stop_on_success and self.solved() is not None:
+            raise TargetMet("every constraint is already satisfied")
+
         if self.exhausted:
             raise BudgetExhausted(
                 f"simulation budget of {self.budget} is spent"
@@ -132,3 +142,12 @@ class Evaluator:
 
 class BudgetExhausted(RuntimeError):
     pass
+
+
+class TargetMet(BudgetExhausted):
+    """Raised when stop_on_success is set and the spec is already met.
+
+    Subclasses BudgetExhausted so every optimizer's existing handler unwinds
+    it correctly -- from the optimizer's point of view there is simply no more
+    budget, which is true.
+    """

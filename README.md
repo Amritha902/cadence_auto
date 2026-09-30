@@ -31,10 +31,11 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[llm,dev]'
 brew install ngspice      # or: apt install ngspice
 ```
 
-Build a circuit from a description:
+Build a circuit from a description — logic or analog:
 
 ```bash
 .venv/bin/bias build "build me a half adder" --out ./out
+.venv/bin/bias build "op-amp with 60dB gain and 10MHz bandwidth" --out ./out
 ```
 
 Simulate one analog sizing:
@@ -149,6 +150,63 @@ over the device/net graph. Two circuits hash equal when they are the same
 topology under any renaming of internal nets and devices — but supply and
 ground nets are labelled distinctly, because swapping VDD for an internal node
 is a different circuit even when the graph shape is identical.
+
+
+### Analog: a spoken specification, sized against the simulator
+
+The same command takes a target instead of a name.
+
+```bash
+bias build "op-amp with 65dB gain, 8MHz bandwidth, under 200uW, 1pF load" --out ./out
+```
+
+```
+targets :
+  gain         >= 65dB
+  gbw          >= 8MHz
+  pwr          <= 200uW
+  pm           >= 55deg  (implied, not stated)
+  vout_margin  >= 200m  (implied, not stated)
+  load         =  1pF
+topology: miller  (65dB exceeds the single-stage ceiling (~48dB), so a
+                   two-stage amplifier is needed)
+
+SIZED: all targets met after 311 simulations
+
+  [PASS] gain: 73.16dB (want >= 65dB)
+  [PASS] gbw: 12.17MHz (want >= 8MHz)
+  [PASS] pwr: 25.33uW (want <= 200uW)
+  [PASS] pm: 68.82deg (want >= 55deg)
+  [PASS] vout_margin: 361m (want >= 200m)
+```
+
+Out comes the sized netlist, a symbol, the AC testbench, and a **Bode plot
+drawn from a real 501-point sweep** — no interpolation, no idealised roll-off.
+
+Three things here are deliberate:
+
+**Parsing is deterministic.** Engineering notation and analog vocabulary are
+small and regular, so a parser beats a model on accuracy, latency and cost —
+and cannot invent a target you did not ask for, which for a *specification* is
+the failure that matters. `10 MHz` and `10 mW` differ only by case, and
+conflating them loses six orders of magnitude; there is a test for exactly
+that.
+
+**Unstated constraints are supplied and labelled.** Ask for gain and bandwidth
+and you also get phase margin ≥ 55° and an output that must sit off the rails.
+Without them the optimizer returns something that meets the letter of the
+request and is not an amplifier. They are marked `(implied, not stated)` so you
+can see what was assumed on your behalf.
+
+**Topology choice is a measured number, not a rule of thumb.** The 5T OTA tops
+out near 48 dB once phase margin is held at 60° — it buys gain with channel
+length, and length costs stability. That ceiling came out of calibration, and
+it is the threshold above which the builder switches to two stages. Ask for
+140 dB and it refuses immediately rather than burning a budget to discover it.
+
+Building stops the moment the spec is met, and restarts from a fresh seed if it
+does not — these objectives have wide flat regions where a population collapses
+early, so a second start is worth more than a longer first one.
 
 
 ---
@@ -357,7 +415,9 @@ bias/
   logic.py        deterministic static-CMOS synthesis
   verify.py       truth-table proof by transient simulation
   symbol.py       SVG schematic symbols
-  design.py       natural language -> verified circuit
+  design.py       natural language -> verified circuit (both halves)
+  specparse.py    spoken specs -> Metric targets
+  plot.py         AC sweeps and Bode plots
   specs.py        the frozen benchmark suite
   bench.py        the harness
 scripts/

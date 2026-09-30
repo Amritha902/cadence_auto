@@ -45,3 +45,8 @@ jobs:
           bias cells
           bias build "half adder" --no-llm
           bias build "full adder" --no-llm
+
+      # The analog half of the same command: a spoken spec must still size.
+      - name: Analog sizing from a spoken spec
+        run: |
+          bias build "op-amp with 40dB gain and 5MHz bandwidth under 200uW driving a 1pF load" --no-llm --budget 400
