@@ -95,3 +95,24 @@ class TestLogicOnSky130:
 def test_sky130_is_marked_calibrated(sky):
     """Unlike dev180, results from this PDK are reportable."""
     assert sky.calibrated
+
+
+def test_availability_requires_every_included_file():
+    """Regression: the tracked shim must not make sky130 look fetched.
+
+    pdks/sky130_nominal.spice lives in this repository, so a PDK-availability
+    check that passes when *any* referenced file exists reports sky130 as ready
+    on a machine that never fetched it -- and these tests then run and fail
+    instead of skipping. CI caught this the hard way.
+    """
+    from pathlib import Path
+
+    from bias.pdk import PDK, PDK_DIR, _model_files_present
+
+    partial = PDK(
+        name="partial",
+        include=(f".include /nonexistent/models.spice\n"
+                 f".include {PDK_DIR / 'sky130_nominal.spice'}"),
+        nmos="n", pmos="p", vdd=1.8, lmin=1e-7, wmin=1e-7,
+    )
+    assert not _model_files_present(partial)

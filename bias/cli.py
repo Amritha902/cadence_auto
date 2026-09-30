@@ -136,9 +136,16 @@ def _cmd_list() -> int:
     print("\nPDKS")
     have = set(pdk.available())
     for name, p in pdk.REGISTRY.items():
-        status = "ready" if name in have else "not fetched"
+        if name in have:
+            status = "ready"
+        elif not p.usable:
+            status = "unusable"
+        else:
+            status = "not fetched"
         cal = "" if p.calibrated else "  [NOT CALIBRATED -- dev only]"
         print(f"  {name:<14} {status}{cal}")
+        if not p.usable and p.blocker:
+            print(f"{'':<16} {p.blocker}")
     return 0
 
 

@@ -39,6 +39,13 @@ class PDK:
     # this wrong produces a netlist ngspice parses and silently mis-simulates,
     # so it belongs to the PDK rather than to the topology.
     device_style: str = "model"      # "model" | "subckt"
+    # False when the model files can be fetched but ngspice still cannot
+    # simulate them -- currently only PSP-based PDKs, which need compiled OSDI
+    # objects. Listing such a PDK as ready sends people into a confusing
+    # failure, so `available()` excludes it and `bias list` says why.
+    usable: bool = True
+    # One line saying what is missing, shown when usable is False.
+    blocker: str = ""
     # True only for processes with real, foundry-calibrated models. The bench
     # refuses to publish results from a PDK where this is False.
     calibrated: bool = True
@@ -152,6 +159,8 @@ IHP_SG13G2 = PDK(
     lmin=0.13e-6,
     wmin=0.15e-6,
     device_style="subckt",
+    usable=False,
+    blocker="needs psp103.osdi built with OpenVAF; upstream ships no osdi/",
     calibrated=True,
     notes=(
         "IHP SG13G2 130nm BiCMOS. Devices are PSP 103.6, which ngspice can "
@@ -169,6 +178,10 @@ def get(name: str) -> PDK:
     if name not in REGISTRY:
         raise KeyError(f"unknown PDK {name!r}; have {sorted(REGISTRY)}")
     pdk = REGISTRY[name]
+    if not pdk.usable:
+        raise FileNotFoundError(
+            f"PDK {name!r} is registered but not usable with ngspice.\n{pdk.notes}"
+        )
     if not _model_files_present(pdk):
         raise FileNotFoundError(
             f"PDK {name!r} is registered but its model files are missing.\n"
@@ -179,12 +192,19 @@ def get(name: str) -> PDK:
 
 
 def available() -> list[str]:
-    return [n for n, p in REGISTRY.items() if _model_files_present(p)]
+    """PDKs that can actually simulate right now."""
+    return [
+        n for n, p in REGISTRY.items()
+        if p.usable and _model_files_present(p)
+    ]
 
 
 def _model_files_present(pdk: PDK) -> bool:
-    # The include line ends with a path (possibly followed by a corner name).
-    for token in pdk.include.split():
-        if "/" in token and Path(token).exists():
-            return True
-    return False
+    """True only when every file the PDK includes is on disk.
+
+    Must be *every* file, not any: this repository tracks a small shim beside
+    the fetched PDKs, so an "any" test reports a PDK as ready whenever the shim
+    exists, and the tests that should skip run and fail instead.
+    """
+    paths = [Path(tok) for tok in pdk.include.split() if "/" in tok]
+    return bool(paths) and all(p.exists() for p in paths)
