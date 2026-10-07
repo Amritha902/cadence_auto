@@ -130,18 +130,40 @@ electrical terms rather than SPICE terms:
 
 ### Cells
 
-| cell | transistors | notes |
-| --- | --- | --- |
-| `inverter` | 2 | |
-| `nand2` | 4 | series NMOS widened by stack depth |
-| `nor2` | 4 | series PMOS widened by stack depth |
-| `xor2` | 16 | four NAND2, every node actively driven |
-| `half_adder` | 18 | carry reuses the XOR's first NAND |
-| `full_adder` | 50 | two half adders and an OR |
+Twenty cells, every one proved against its truth table by transient
+simulation on real sky130 foundry models.
+
+| cell | transistors | in | out |
+| --- | --- | --- | --- |
+| `adder2` | 100 | a0,a1,b0,b1,cin | s0,s1,cout |
+| `and2` | 6 | a,b | y |
+| `buffer` | 4 | a | y |
+| `comparator1` | 34 | a,b | gt,eq,lt |
+| `decoder2to4` | 28 | a,b | y0,y1,y2,y3 |
+| `full_adder` | 50 | a,b,cin | sum,cout |
+| `full_subtractor` | 60 | a,b,bin | diff,borrow |
+| `half_adder` | 18 | a,b | sum,carry |
+| `half_subtractor` | 24 | a,b | diff,borrow |
+| `inverter` | 2 | a | y |
+| `majority3` | 26 | a,b,c | y |
+| `mux2` | 14 | a,b,s | y |
+| `nand2` | 4 | a,b | y |
+| `nand3` | 6 | a,b,c | y |
+| `nor2` | 4 | a,b | y |
+| `nor3` | 6 | a,b,c | y |
+| `or2` | 6 | a,b | y |
+| `parity4` | 48 | a,b,c,d | y |
+| `xnor2` | 18 | a,b | y |
+| `xor2` | 16 | a,b | y |
 
 The half adder is 18 transistors rather than 20 because `NAND(a,b)` is already
 computed inside the XOR, so the carry costs one inverter instead of a whole AND
-gate.
+gate. Series stacks are widened by their depth so pull-down strength stays
+constant -- which is also why `nor3` is so much larger than `nand3`, and why
+wide NORs are avoided in practice.
+
+`adder2` is the composition test: two full adders chained, 100 transistors,
+all 32 input combinations proved in a single transient.
 
 ### Circuit identity
 

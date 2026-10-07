@@ -26,13 +26,37 @@ from .pdk import PDK
 # Spelling variants map to a cell. Matched against the request with word
 # boundaries after punctuation is stripped.
 ALIASES: dict[str, str] = {
+    # Adders and subtractors.
     "half adder": "half_adder", "halfadder": "half_adder", "half add": "half_adder",
     "full adder": "full_adder", "fulladder": "full_adder", "full add": "full_adder",
-    "xor": "xor2", "exclusive or": "xor2", "xor gate": "xor2",
-    "nand": "nand2", "nand gate": "nand2",
-    "nor": "nor2", "nor gate": "nor2",
-    "inverter": "inverter", "not gate": "inverter", "inv": "inverter",
     "adder": "full_adder",
+    "2 bit adder": "adder2", "two bit adder": "adder2",
+    "2-bit adder": "adder2", "ripple carry": "adder2", "ripple carry adder": "adder2",
+    "half subtractor": "half_subtractor", "half sub": "half_subtractor",
+    "full subtractor": "full_subtractor", "full sub": "full_subtractor",
+    "subtractor": "full_subtractor", "subtracter": "full_subtractor",
+
+    # Basic gates.
+    "xor": "xor2", "exclusive or": "xor2", "xor gate": "xor2",
+    "xnor": "xnor2", "xnor gate": "xnor2", "equivalence": "xnor2",
+    "nand": "nand2", "nand gate": "nand2",
+    "3 input nand": "nand3", "three input nand": "nand3", "nand3": "nand3",
+    "nor": "nor2", "nor gate": "nor2",
+    "3 input nor": "nor3", "three input nor": "nor3", "nor3": "nor3",
+    "and": "and2", "and gate": "and2",
+    "or": "or2", "or gate": "or2",
+    "inverter": "inverter", "not gate": "inverter", "inv": "inverter",
+    "buffer": "buffer", "buf": "buffer", "non inverting buffer": "buffer",
+
+    # Blocks.
+    "mux": "mux2", "multiplexer": "mux2", "2 to 1 mux": "mux2",
+    "2:1 mux": "mux2", "selector": "mux2",
+    "decoder": "decoder2to4", "2 to 4 decoder": "decoder2to4",
+    "one hot": "decoder2to4", "one hot decoder": "decoder2to4",
+    "comparator": "comparator1", "magnitude comparator": "comparator1",
+    "compare": "comparator1",
+    "majority": "majority3", "majority gate": "majority3", "voter": "majority3",
+    "parity": "parity4", "parity checker": "parity4", "parity tree": "parity4",
 }
 
 

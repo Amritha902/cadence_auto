@@ -246,6 +246,179 @@ def xor2_cell(sizing: Sizing | None = None) -> Circuit:
     return Circuit("xor2", b.devices, ["a", "b", "y", VDD], "2-input XOR (4x NAND2)")
 
 
+
+
+def buffer_cell(sizing: Sizing | None = None) -> Circuit:
+    """Two inverters. Restores a degraded signal and adds drive strength."""
+    b = Builder(sizing or Sizing())
+    mid = b.net("buf")
+    b.inverter("a", mid)
+    b.inverter(mid, "y")
+    return Circuit("buffer", b.devices, ["a", "y", VDD], "non-inverting buffer")
+
+
+def and2_cell(sizing: Sizing | None = None) -> Circuit:
+    b = Builder(sizing or Sizing())
+    b.and_gate(["a", "b"], "y")
+    return Circuit("and2", b.devices, ["a", "b", "y", VDD], "2-input AND")
+
+
+def or2_cell(sizing: Sizing | None = None) -> Circuit:
+    b = Builder(sizing or Sizing())
+    b.or_gate(["a", "b"], "y")
+    return Circuit("or2", b.devices, ["a", "b", "y", VDD], "2-input OR")
+
+
+def nand3_cell(sizing: Sizing | None = None) -> Circuit:
+    b = Builder(sizing or Sizing())
+    b.nand(["a", "b", "c"], "y")
+    return Circuit("nand3", b.devices, ["a", "b", "c", "y", VDD],
+                   "3-input NAND (three NMOS in series)")
+
+
+def nor3_cell(sizing: Sizing | None = None) -> Circuit:
+    b = Builder(sizing or Sizing())
+    b.nor(["a", "b", "c"], "y")
+    return Circuit("nor3", b.devices, ["a", "b", "c", "y", VDD],
+                   "3-input NOR (three PMOS in series -- why wide NORs are avoided)")
+
+
+def xnor2_cell(sizing: Sizing | None = None) -> Circuit:
+    b = Builder(sizing or Sizing())
+    mid = b.net("xor")
+    b.xor2("a", "b", mid)
+    b.inverter(mid, "y")
+    return Circuit("xnor2", b.devices, ["a", "b", "y", VDD], "2-input XNOR")
+
+
+def mux2_cell(sizing: Sizing | None = None) -> Circuit:
+    """Y = s ? b : a.
+
+    Built from NANDs rather than transmission gates so every node is actively
+    driven to a rail -- the truth table then holds without depending on input
+    drive strength or charge sharing.
+    """
+    b = Builder(sizing or Sizing())
+    ns = b.net("ns")
+    b.inverter("s", ns)
+    t1, t2 = b.net("m"), b.net("m")
+    b.nand(["a", ns], t1)
+    b.nand(["b", "s"], t2)
+    b.nand([t1, t2], "y")
+    return Circuit("mux2", b.devices, ["a", "b", "s", "y", VDD],
+                   "2:1 multiplexer")
+
+
+def decoder2to4_cell(sizing: Sizing | None = None) -> Circuit:
+    """One-hot decoder: exactly one of y0..y3 is high."""
+    b = Builder(sizing or Sizing())
+    na, nb = b.net("na"), b.net("nb")
+    b.inverter("a", na)
+    b.inverter("b", nb)
+    b.and_gate([na, nb], "y0")
+    b.and_gate(["a", nb], "y1")
+    b.and_gate([na, "b"], "y2")
+    b.and_gate(["a", "b"], "y3")
+    return Circuit("decoder2to4", b.devices,
+                   ["a", "b", "y0", "y1", "y2", "y3", VDD],
+                   "2-to-4 one-hot decoder")
+
+
+def half_subtractor(sizing: Sizing | None = None) -> Circuit:
+    """DIFF = a XOR b, BORROW = (NOT a) AND b."""
+    b = Builder(sizing or Sizing())
+    b.xor2("a", "b", "diff")
+    na = b.net("na")
+    b.inverter("a", na)
+    b.and_gate([na, "b"], "borrow")
+    return Circuit("half_subtractor", b.devices,
+                   ["a", "b", "diff", "borrow", VDD], "half subtractor")
+
+
+def full_subtractor(sizing: Sizing | None = None) -> Circuit:
+    """DIFF = a^b^bin, BORROW = (~a AND b) OR (~a AND bin) OR (b AND bin)."""
+    b = Builder(sizing or Sizing())
+    d1 = b.net("d")
+    b.xor2("a", "b", d1)
+    b.xor2(d1, "bin", "diff")
+
+    na = b.net("na")
+    b.inverter("a", na)
+    t1, t2, t3 = b.net("t"), b.net("t"), b.net("t")
+    b.and_gate([na, "b"], t1)
+    b.and_gate([na, "bin"], t2)
+    b.and_gate(["b", "bin"], t3)
+    b.or_gate([t1, t2, t3], "borrow")
+    return Circuit("full_subtractor", b.devices,
+                   ["a", "b", "bin", "diff", "borrow", VDD], "full subtractor")
+
+
+def comparator1_cell(sizing: Sizing | None = None) -> Circuit:
+    """1-bit magnitude comparator: gt, eq, lt."""
+    b = Builder(sizing or Sizing())
+    na, nb = b.net("na"), b.net("nb")
+    b.inverter("a", na)
+    b.inverter("b", nb)
+    b.and_gate(["a", nb], "gt")
+    b.and_gate([na, "b"], "lt")
+    x = b.net("x")
+    b.xor2("a", "b", x)
+    b.inverter(x, "eq")
+    return Circuit("comparator1", b.devices,
+                   ["a", "b", "gt", "eq", "lt", VDD],
+                   "1-bit magnitude comparator")
+
+
+def majority3_cell(sizing: Sizing | None = None) -> Circuit:
+    """Y is high when at least two inputs are high. The carry of a full adder."""
+    b = Builder(sizing or Sizing())
+    t1, t2, t3 = b.net("t"), b.net("t"), b.net("t")
+    b.and_gate(["a", "b"], t1)
+    b.and_gate(["b", "c"], t2)
+    b.and_gate(["a", "c"], t3)
+    b.or_gate([t1, t2, t3], "y")
+    return Circuit("majority3", b.devices, ["a", "b", "c", "y", VDD],
+                   "3-input majority vote")
+
+
+def parity4_cell(sizing: Sizing | None = None) -> Circuit:
+    """Even-parity tree: y is high when an odd number of inputs are high."""
+    b = Builder(sizing or Sizing())
+    t1, t2 = b.net("p"), b.net("p")
+    b.xor2("a", "b", t1)
+    b.xor2("c", "d", t2)
+    b.xor2(t1, t2, "y")
+    return Circuit("parity4", b.devices, ["a", "b", "c", "d", "y", VDD],
+                   "4-input parity (XOR tree)")
+
+
+def adder2(sizing: Sizing | None = None) -> Circuit:
+    """2-bit ripple-carry adder: two full adders chained.
+
+    The point of this one is composition -- the carry of the first stage is
+    the carry-in of the second, and the whole thing is still proved by one
+    transient over all 32 input combinations.
+    """
+    b = Builder(sizing or Sizing())
+
+    def full_add(x, y, cin, s_out, c_out):
+        ab = b.net("fa")
+        b.xor2(x, y, ab)
+        b.xor2(ab, cin, s_out)
+        c1, c2 = b.net("c"), b.net("c")
+        b.and_gate([x, y], c1)
+        b.and_gate([ab, cin], c2)
+        b.or_gate([c1, c2], c_out)
+
+    carry = b.net("carry")
+    full_add("a0", "b0", "cin", "s0", carry)
+    full_add("a1", "b1", carry, "s1", "cout")
+
+    return Circuit("adder2", b.devices,
+                   ["a0", "a1", "b0", "b1", "cin", "s0", "s1", "cout", VDD],
+                   "2-bit ripple-carry adder (two full adders)")
+
+
 # name -> (builder, input ports, output ports, reference function)
 CELLS: dict[str, tuple] = {
     "inverter": (inverter_cell, ["a"], ["y"], lambda a: {"y": 1 - a}),
@@ -260,7 +433,59 @@ CELLS: dict[str, tuple] = {
         full_adder, ["a", "b", "cin"], ["sum", "cout"],
         lambda a, b, c: {"sum": a ^ b ^ c, "cout": 1 if (a + b + c) >= 2 else 0},
     ),
+    "buffer": (buffer_cell, ["a"], ["y"], lambda a: {"y": a}),
+    "and2": (and2_cell, ["a", "b"], ["y"], lambda a, b: {"y": a & b}),
+    "or2": (or2_cell, ["a", "b"], ["y"], lambda a, b: {"y": a | b}),
+    "nand3": (
+        nand3_cell, ["a", "b", "c"], ["y"],
+        lambda a, b, c: {"y": 1 - (a & b & c)},
+    ),
+    "nor3": (
+        nor3_cell, ["a", "b", "c"], ["y"],
+        lambda a, b, c: {"y": 1 - (a | b | c)},
+    ),
+    "xnor2": (xnor2_cell, ["a", "b"], ["y"], lambda a, b: {"y": 1 - (a ^ b)}),
+    "mux2": (
+        mux2_cell, ["a", "b", "s"], ["y"],
+        lambda a, b, s: {"y": b if s else a},
+    ),
+    "decoder2to4": (
+        decoder2to4_cell, ["a", "b"], ["y0", "y1", "y2", "y3"],
+        lambda a, b: {f"y{i}": int(i == (b << 1 | a)) for i in range(4)},
+    ),
+    "half_subtractor": (
+        half_subtractor, ["a", "b"], ["diff", "borrow"],
+        lambda a, b: {"diff": a ^ b, "borrow": int((not a) and b)},
+    ),
+    "full_subtractor": (
+        full_subtractor, ["a", "b", "bin"], ["diff", "borrow"],
+        lambda a, b, bi: {
+            "diff": a ^ b ^ bi,
+            "borrow": int(((not a) and b) or ((not a) and bi) or (b and bi)),
+        },
+    ),
+    "comparator1": (
+        comparator1_cell, ["a", "b"], ["gt", "eq", "lt"],
+        lambda a, b: {"gt": int(a > b), "eq": int(a == b), "lt": int(a < b)},
+    ),
+    "majority3": (
+        majority3_cell, ["a", "b", "c"], ["y"],
+        lambda a, b, c: {"y": int(a + b + c >= 2)},
+    ),
+    "parity4": (
+        parity4_cell, ["a", "b", "c", "d"], ["y"],
+        lambda a, b, c, d: {"y": a ^ b ^ c ^ d},
+    ),
+    "adder2": (
+        adder2, ["a0", "a1", "b0", "b1", "cin"], ["s0", "s1", "cout"],
+        lambda a0, a1, b0, b1, ci: _adder2_ref(a0, a1, b0, b1, ci),
+    ),
 }
+
+
+def _adder2_ref(a0: int, a1: int, b0: int, b1: int, cin: int) -> dict[str, int]:
+    total = (a1 << 1 | a0) + (b1 << 1 | b0) + cin
+    return {"s0": total & 1, "s1": (total >> 1) & 1, "cout": (total >> 2) & 1}
 
 
 def get(name: str) -> tuple:

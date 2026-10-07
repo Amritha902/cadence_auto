@@ -167,3 +167,88 @@ class TestSimulatedTruthTables:
         for artifact in ("symbol", "netlist", "testbench", "truth"):
             assert result.files[artifact].exists()
         assert result.files["symbol"].read_text().startswith("<svg")
+
+
+class TestExpandedLibrary:
+    """The cells added to make "ask for it and get it" actually reach."""
+
+    def test_reference_functions_are_right(self):
+        ref = {n: dict((tuple(i.values()), o)
+                       for i, o in logic.truth_table(n)) for n in logic.CELLS}
+
+        assert ref["mux2"][(0, 1, 1)] == {"y": 1}     # s=1 selects b
+        assert ref["mux2"][(0, 1, 0)] == {"y": 0}     # s=0 selects a
+        assert ref["majority3"][(1, 1, 0)] == {"y": 1}
+        assert ref["majority3"][(1, 0, 0)] == {"y": 0}
+        assert ref["parity4"][(1, 1, 1, 0)] == {"y": 1}
+        assert ref["parity4"][(1, 1, 0, 0)] == {"y": 0}
+        assert ref["comparator1"][(1, 0)] == {"gt": 1, "eq": 0, "lt": 0}
+        assert ref["comparator1"][(1, 1)] == {"gt": 0, "eq": 1, "lt": 0}
+        assert ref["half_subtractor"][(0, 1)] == {"diff": 1, "borrow": 1}
+        assert ref["half_subtractor"][(1, 1)] == {"diff": 0, "borrow": 0}
+
+    def test_decoder_is_one_hot(self):
+        for inputs, out in logic.truth_table("decoder2to4"):
+            assert sum(out.values()) == 1, f"{inputs} is not one-hot: {out}"
+
+    def test_full_subtractor_matches_arithmetic(self):
+        for inputs, out in logic.truth_table("full_subtractor"):
+            a, b, bi = inputs["a"], inputs["b"], inputs["bin"]
+            expected = a - b - bi
+            value = out["diff"] - 2 * out["borrow"]
+            assert value == expected, f"{inputs} gave {out}"
+
+    def test_adder2_matches_binary_addition(self):
+        for inputs, out in logic.truth_table("adder2"):
+            a = inputs["a1"] << 1 | inputs["a0"]
+            b = inputs["b1"] << 1 | inputs["b0"]
+            total = out["cout"] << 2 | out["s1"] << 1 | out["s0"]
+            assert total == a + b + inputs["cin"], f"{inputs} gave {out}"
+
+    def test_three_input_stacks_are_widened_by_depth(self):
+        """A 3-high series stack needs 3x the width to keep drive constant.
+
+        The complementary devices stay at nominal: in a NAND the PMOS are in
+        parallel, in a NOR the NMOS are, and parallel devices need no widening.
+        """
+        base = logic.Sizing()
+
+        def widths(cell: str, kind: str) -> list[float]:
+            circuit = logic.get(cell)[0]()
+            return sorted({d.params["W"] for d in circuit.transistors()
+                           if d.kind.value == kind})
+
+        assert widths("nand3", "nmos") == [pytest.approx(3 * base.wn)]
+        assert widths("nand3", "pmos") == [pytest.approx(base.wp)]
+        assert widths("nor3", "pmos") == [pytest.approx(3 * base.wp)]
+        assert widths("nor3", "nmos") == [pytest.approx(base.wn)]
+
+    @pytest.mark.parametrize("request_text,expected", [
+        ("build me a mux", "mux2"),
+        ("I need a 2:1 multiplexer", "mux2"),
+        ("a 2 to 4 decoder", "decoder2to4"),
+        ("make a full subtractor", "full_subtractor"),
+        ("a magnitude comparator", "comparator1"),
+        ("majority voter", "majority3"),
+        ("parity checker", "parity4"),
+        ("a 2 bit adder", "adder2"),
+        ("ripple carry adder", "adder2"),
+        ("3 input nand", "nand3"),
+        ("an xnor gate", "xnor2"),
+        ("a buffer", "buffer"),
+        ("and gate", "and2"),
+        ("or gate", "or2"),
+    ])
+    def test_new_aliases_resolve(self, request_text, expected):
+        assert design.resolve(request_text, use_llm=False)[0] == expected
+
+    def test_common_english_words_do_not_misroute(self):
+        """'and' and 'or' are ordinary words; longer aliases must win."""
+        assert design.resolve("build me a NAND gate", use_llm=False)[0] == "nand2"
+        assert design.resolve("a NOR gate", use_llm=False)[0] == "nor2"
+        assert design.resolve("a half adder", use_llm=False)[0] == "half_adder"
+
+    def test_specific_beats_general(self):
+        assert design.resolve("2 bit adder", use_llm=False)[0] == "adder2"
+        assert design.resolve("full adder", use_llm=False)[0] == "full_adder"
+        assert design.resolve("half subtractor", use_llm=False)[0] == "half_subtractor"

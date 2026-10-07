@@ -74,8 +74,11 @@ def catalogue() -> dict:
 EXAMPLES = [
     {"label": "Half adder", "request": "build me a half adder"},
     {"label": "Full adder", "request": "build me a full adder"},
-    {"label": "XOR gate", "request": "an XOR gate"},
-    {"label": "Low-gain amp", "request":
+    {"label": "2:1 mux", "request": "a 2:1 multiplexer"},
+    {"label": "2-to-4 decoder", "request": "a 2 to 4 decoder"},
+    {"label": "Comparator", "request": "a magnitude comparator"},
+    {"label": "2-bit adder", "request": "a 2 bit adder"},
+    {"label": "Op-amp", "request":
      "an op-amp with 40dB gain and 5MHz bandwidth under 200uW driving a 1pF load"},
     {"label": "Two-stage op-amp", "request":
      "op-amp with 65dB gain, 8MHz bandwidth, under 200uW, 1pF load"},
