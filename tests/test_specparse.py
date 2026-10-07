@@ -185,3 +185,41 @@ class TestAnalogBuild:
 
         with pytest.raises(LookupError, match="half_adder"):
             design.build_any("build me a spaceship", pdk.DEV180, use_llm=False)
+
+
+@pytest.mark.needs_ngspice
+class TestTopologyFallback:
+    """The single-stage threshold is a measured number from one process.
+
+    It can be wrong on another, so size() escalates to two stages rather than
+    reporting a near miss. These force that path: the normal thresholds happen
+    to be right on both PDKs shipped here, so it would otherwise never run.
+    """
+
+    def test_falls_back_to_two_stages_when_the_threshold_is_wrong(
+        self, monkeypatch
+    ):
+        from bias import pdk
+
+        # Pretend the single stage can reach 200dB, so it is chosen for a
+        # target it cannot possibly meet.
+        monkeypatch.setattr(design, "OTA5T_GAIN_CEILING_DB", 200.0)
+
+        result = design.size(
+            "op-amp with 65dB gain, 2MHz bandwidth, under 400uW, 1pF load",
+            pdk.DEV180, budget=250, attempts=1,
+        )
+        assert result.topology_name == "miller", (
+            "should have escalated after the single stage fell short"
+        )
+        assert "reached only" in result.why_topology
+
+    def test_no_fallback_when_the_single_stage_succeeds(self):
+        from bias import pdk
+
+        result = design.size(
+            "op-amp with 40dB gain, 2MHz bandwidth, under 400uW, 1pF load",
+            pdk.DEV180, budget=300, attempts=1,
+        )
+        assert result.topology_name == "ota5t"
+        assert "reached only" not in result.why_topology

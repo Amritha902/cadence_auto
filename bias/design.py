@@ -185,10 +185,15 @@ def _write(path: Path, text: str) -> Path:
 # Analog: a spoken specification, sized against the simulator
 # ---------------------------------------------------------------------------
 
-# Measured ceilings, not guesses. Calibration found the 5T OTA tops out near
-# 49 dB once phase margin is held at 60 deg -- it buys gain with channel
-# length, and length costs stability. Above that the request needs two stages.
-# See the calibration note in specs.py.
+# Where to start looking, not where to stop. Calibration on dev180 found the
+# 5T OTA tops out near 49 dB once phase margin is held at 60 deg -- it buys
+# gain with channel length, and length costs stability.
+#
+# That number is process-dependent: on sky130 the same topology reaches less,
+# because real 130nm devices have worse output resistance. Rather than carry a
+# per-PDK constant that silently goes stale, this is only the first guess --
+# `size()` falls back to the two-stage topology when the single stage cannot
+# meet the gain, so a wrong threshold costs simulations and not a wrong answer.
 OTA5T_GAIN_CEILING_DB = 48.0
 MILLER_GAIN_CEILING_DB = 80.0
 
@@ -327,6 +332,35 @@ def size(
     best = ev.solved() or (
         min((x for x in (ev.best, best_so_far) if x), key=lambda e: e.score)
     )
+
+    # The single stage was chosen on a threshold measured on another process.
+    # If it could not reach the gain, that threshold was simply wrong here --
+    # escalate to two stages rather than reporting a near miss.
+    if (
+        not ev.solved()
+        and topo_name == "ota5t"
+        and gain_db is not None
+        and not best.measured.get("gain", 0) >= gain_db
+    ):
+        topo = topo_registry.get("miller")
+        topo_name = "miller"
+        why = (
+            f"the single stage reached only "
+            f"{best.measured.get('gain', float('nan')):.1f}dB against a "
+            f"{gain_db:.0f}dB target on {pdk.name}, so a two-stage amplifier "
+            "was tried instead"
+        )
+        fallback_best = best
+        for attempt in range(max(1, attempts)):
+            ev = Evaluator(topo, pdk, parsed.spec, tb, budget=budget,
+                           stop_on_success=True)
+            optimizers.get(name).run(ev, np.random.default_rng(seed + attempt))
+            total_sims += ev.used
+            if ev.solved():
+                break
+            if ev.best and ev.best.score < fallback_best.score:
+                fallback_best = ev.best
+        best = ev.solved() or fallback_best
     values = best.values if best else {}
     measured = best.measured if best else {}
 

@@ -211,6 +211,26 @@ early, so a second start is worth more than a longer first one.
 
 ---
 
+## The web prototype
+
+```bash
+.venv/bin/pip install -e '.[web]'
+web/run.sh          # http://localhost:8010
+```
+
+The same engine behind a browser. Type a request, watch it build and simulate,
+read the result. Nothing is cached or precomputed — every page load that shows
+a truth table ran a transient, and every Bode plot is 501 points that came out
+of ngspice during that request.
+
+It is deliberately honest about failure. An analog request that does not meet
+its spec says so and shows the closest result, because a tool that quietly
+returns a near miss is worse than one that admits it. Constraints added on
+your behalf are tagged `implied` rather than slipped in.
+
+
+---
+
 ## What is measured
 
 Three numbers, per (spec, optimizer):

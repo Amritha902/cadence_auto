@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bias — describe a circuit, get a simulated one</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#fbfaf7; --card:#fff; --ink:#2a2724; --ink-soft:#55504a;
+    --ink-faint:#8a8179; --rule:#e5ded3; --accent:#b4552d; --accent-soft:#f6ede6;
+    --ok:#3f6b4a; --ok-soft:#eef4ef; --bad:#a33a2a; --bad-soft:#fbeeeb;
+    --blue:#3d6b8e;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#14120f; --card:#1c1917; --ink:#f5f0e8; --ink-soft:#b8afa4;
+      --ink-faint:#8a8179; --rule:#322c25; --accent:#e08a5c; --accent-soft:#2a211b;
+      --ok:#8fbf9c; --ok-soft:#1b241d; --bad:#e08a7c; --bad-soft:#2a1d1a;
+      --blue:#7aa9cc;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font:400 16px/1.6 Inter,ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:860px; margin:0 auto; padding:0 16px}
+  header{padding:56px 0 30px; border-bottom:1px solid var(--rule)}
+  h1{
+    font:600 clamp(32px,6vw,46px)/1.05 Fraunces,ui-serif,Georgia,serif;
+    margin:0 0 12px; letter-spacing:-.015em;
+  }
+  h1 em{font-style:normal; color:var(--accent)}
+  .lede{margin:0; color:var(--ink-soft); font-size:17px; max-width:56ch}
+  .lede strong{color:var(--ink); font-weight:600}
+
+  form{margin:30px 0 0}
+  .field{display:flex; gap:10px; flex-wrap:wrap}
+  input[type=text]{
+    flex:1 1 320px; min-width:0; padding:14px 16px; background:var(--card);
+    border:1px solid var(--rule); border-radius:8px; color:var(--ink);
+    font:400 15px/1.4 Inter,sans-serif;
+  }
+  input[type=text]:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent}
+  button{
+    padding:14px 22px; border:0; border-radius:8px; background:var(--accent);
+    color:#fff; font:600 15px Inter,sans-serif; cursor:pointer; white-space:nowrap;
+  }
+  button:hover{filter:brightness(.94)}
+  button:disabled{opacity:.5; cursor:default}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px}
+  select{
+    padding:8px 11px; background:var(--card); border:1px solid var(--rule);
+    border-radius:7px; color:var(--ink-soft); font:500 13px Inter,sans-serif;
+  }
+  .chips{display:flex; gap:7px; flex-wrap:wrap; margin-top:14px}
+  .chip{
+    padding:6px 12px; background:transparent; border:1px solid var(--rule);
+    border-radius:99px; color:var(--ink-soft);
+    font:500 13px Inter,sans-serif; cursor:pointer;
+  }
+  .chip:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-soft)}
+
+  .status{margin:28px 0 0; color:var(--ink-faint); font-size:14px}
+  .status .spin{
+    display:inline-block; width:11px; height:11px; margin-right:8px;
+    border:2px solid var(--rule); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite; vertical-align:-1px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  section{margin:34px 0 0; padding:26px 0 0; border-top:1px solid var(--rule)}
+  section:first-of-type{border-top:0}
+  h2{
+    font:600 13px Inter,sans-serif; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--ink-faint); margin:0 0 16px;
+  }
+  .verdict{
+    display:flex; gap:12px; align-items:baseline; flex-wrap:wrap;
+    padding:16px 18px; border-radius:9px; margin:24px 0 0;
+    border:1px solid var(--rule); background:var(--card);
+  }
+  .verdict.good{border-color:var(--ok); background:var(--ok-soft)}
+  .verdict.bad{border-color:var(--bad); background:var(--bad-soft)}
+  .verdict b{font:600 17px Fraunces,serif}
+  .verdict.good b{color:var(--ok)} .verdict.bad b{color:var(--bad)}
+  .verdict span{color:var(--ink-soft); font-size:14px}
+
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th{
+    text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule);
+    font:600 11px Inter,sans-serif; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--ink-faint);
+  }
+  td{padding:9px 10px; border-bottom:1px solid var(--rule)}
+  tbody tr:last-child td{border-bottom:0}
+  .mono{font:400 13px JetBrains Mono,ui-monospace,Menlo,monospace}
+  .pass{color:var(--ok); font-weight:600}
+  .fail{color:var(--bad); font-weight:600}
+  .tag{
+    display:inline-block; padding:2px 7px; border-radius:4px; margin-left:7px;
+    background:var(--accent-soft); color:var(--accent);
+    font:500 11px Inter,sans-serif; letter-spacing:.02em;
+  }
+  figure{margin:0; text-align:center; background:var(--card);
+         border:1px solid var(--rule); border-radius:9px; padding:18px; overflow-x:auto}
+  figure svg{max-width:100%; height:auto}
+  pre{
+    margin:0; padding:16px; background:var(--card); border:1px solid var(--rule);
+    border-radius:9px; overflow-x:auto;
+    font:400 12.5px/1.6 JetBrains Mono,ui-monospace,Menlo,monospace; color:var(--ink-soft);
+  }
+  details summary{cursor:pointer; color:var(--ink-soft); font-size:14px; margin-bottom:12px}
+  .grid{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .stat{background:var(--card); border:1px solid var(--rule); border-radius:9px; padding:14px 16px}
+  .stat dt{font:600 11px Inter,sans-serif; letter-spacing:.07em;
+           text-transform:uppercase; color:var(--ink-faint); margin:0 0 5px}
+  .stat dd{margin:0; font:600 19px Fraunces,serif}
+  .note{
+    margin:22px 0 0; padding:13px 16px; border-left:3px solid var(--accent);
+    background:var(--accent-soft); border-radius:0 7px 7px 0;
+    color:var(--ink-soft); font-size:13.5px;
+  }
+  footer{
+    margin:56px 0 0; padding:24px 0 48px; border-top:1px solid var(--rule);
+    color:var(--ink-faint); font-size:13px;
+  }
+  footer a{color:var(--accent)}
+  .err{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Describe a circuit.<br>Get one that's been <em>simulated</em>.</h1>
+    <p class="lede">Type what you want in plain English. Bias builds the
+    transistors, then <strong>proves it with a real SPICE simulation</strong> —
+    a truth table for logic, a frequency response for amplifiers. Nothing here
+    is asserted; everything is measured.</p>
+
+    <form id="f">
+      <div class="field">
+        <input id="q" type="text" autocomplete="off"
+               placeholder="a half adder — or an op-amp with 60dB gain and 10MHz bandwidth">
+        <button id="go" type="submit">Build it</button>
+      </div>
+      <div class="row">
+        <select id="pdk" title="Process"></select>
+        <span id="pdkNote" style="color:var(--ink-faint);font-size:13px"></span>
+      </div>
+      <div class="chips" id="chips"></div>
+    </form>
+    <p class="status" id="status"></p>
+  </header>
+
+  <main id="out"></main>
+
+  <footer class="wrap" style="padding-left:0;padding-right:0">
+    Built on <a href="https://github.com/Amritha902/cadence_auto">cadence_auto</a> —
+    ngspice and open PDKs, no commercial licence. Schematic level only:
+    no layout or place-and-route.
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const PREFIX = [[1e9,'G'],[1e6,'M'],[1e3,'k'],[1,''],[1e-3,'m'],
+                [1e-6,'µ'],[1e-9,'n'],[1e-12,'p'],[1e-15,'f']];
+function eng(v, unit){
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  if (v === 0) return '0' + (unit||'');
+  if (unit === 'dB' || unit === 'deg' || unit === '') 
+    return (+v).toPrecision(4).replace(/\.?0+$/,'') + (unit==='deg'?'°':unit);
+  const a = Math.abs(v);
+  for (const [s,p] of PREFIX) if (a >= s) 
+    return (v/s).toPrecision(4).replace(/\.?0+$/,'') + p + (unit||'');
+  return v.toExponential(3) + (unit||'');
+}
+
+let CAT = null;
+async function boot(){
+  CAT = await (await fetch('/api/catalogue')).json();
+  const sel = $('#pdk');
+  sel.innerHTML = CAT.processes.filter(p=>p.ready)
+    .map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+  const sky = CAT.processes.find(p=>p.name==='sky130' && p.ready);
+  if (sky) sel.value = 'sky130';
+  updatePdkNote();
+  sel.onchange = updatePdkNote;
+  $('#chips').innerHTML = CAT.examples
+    .map(e=>`<button type="button" class="chip" data-q="${esc(e.request)}">${esc(e.label)}</button>`).join('');
+  document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+    $('#q').value = c.dataset.q; $('#f').requestSubmit();
+  });
+}
+function updatePdkNote(){
+  const p = CAT.processes.find(x => x.name === $('#pdk').value);
+  $('#pdkNote').textContent = !p ? '' : p.calibrated
+    ? `real foundry models, VDD ${p.vdd}V`
+    : `hand-written card — not a real process`;
+}
+
+$('#f').onsubmit = async e => {
+  e.preventDefault();
+  const request = $('#q').value.trim();
+  if (!request) return;
+  $('#go').disabled = true;
+  $('#out').innerHTML = '';
+  $('#status').innerHTML = '<span class="spin"></span>building and simulating…';
+  try{
+    const r = await fetch('/api/build', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({request, pdk: $('#pdk').value})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'request failed');
+    $('#status').textContent = `${d.seconds}s on ${d.pdk}`;
+    $('#out').innerHTML = d.kind === 'digital' ? digital(d) : analog(d);
+  }catch(err){
+    $('#status').innerHTML = `<span class="err">${esc(err.message)}</span>`;
+  }finally{ $('#go').disabled = false; }
+};
+
+function verdict(ok, good, bad, sub){
+  return `<div class="verdict ${ok?'good':'bad'}">
+    <b>${ok?good:bad}</b><span>${esc(sub||'')}</span></div>`;
+}
+
+function digital(d){
+  const outs = d.outputs;
+  const rows = d.rows.map(r=>`<tr>
+    ${d.inputs.map(i=>`<td class="mono">${r.inputs[i]}</td>`).join('')}
+    ${outs.map(o=>`<td class="mono ${r.actual[o]===r.expected[o]?'pass':'fail'}">${r.actual[o]}</td>`).join('')}
+    ${outs.map(o=>`<td class="mono">${r.volts[o].toFixed(3)} V</td>`).join('')}
+    <td class="${r.passed?'pass':'fail'}">${r.passed?'ok':'FAIL'}</td></tr>`).join('');
+
+  return verdict(d.ok,
+    'Verified against the truth table',
+    'Truth table mismatch',
+    d.ok ? `every input combination simulated correctly, ${(d.worst_rail_error*100).toFixed(2)}% worst rail error`
+         : d.reason)
+  + `<section><h2>${esc(d.resolved)} · ${d.transistors} transistors</h2>
+      <figure>${d.symbol_svg}</figure></section>
+    <section><h2>Truth table — measured, not assumed</h2>
+      <table><thead><tr>
+        ${d.inputs.map(i=>`<th>${esc(i)}</th>`).join('')}
+        ${outs.map(o=>`<th>${esc(o)}</th>`).join('')}
+        ${outs.map(o=>`<th>${esc(o)} volts</th>`).join('')}
+        <th></th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="note">Each row is one transient simulation point. The voltage
+      columns are what the output node actually reached — a gate that settles
+      mid-rail would pass a threshold test and still be a broken design.</p>
+    </section>
+    <section><h2>Netlist</h2>
+      <details><summary>Show SPICE (${d.summary})</summary>
+      <pre>${esc(d.netlist)}</pre></details></section>`;
+}
+
+function analog(d){
+  if (d.infeasible) return verdict(false, '', 'Not attempted', d.infeasible)
+    + `<p class="note">${esc(d.how)}</p>`;
+
+  const rows = d.targets.map(t=>`<tr>
+    <td><span class="mono">${esc(t.name)}</span>${t.implied?'<span class="tag">implied</span>':''}</td>
+    <td class="mono">${t.relation} ${eng(t.target, t.unit)}</td>
+    <td class="mono">${eng(t.measured, t.unit)}</td>
+    <td class="${t.passed?'pass':'fail'}">${t.passed?'pass':'fail'}</td></tr>`).join('');
+
+  const sizing = Object.entries(d.sizing).map(([k,v])=>
+    `<tr><td class="mono">${esc(k)}</td><td class="mono">${eng(v, k==='rz'?'Ω':(k==='cc'?'F':(k==='ibias'?'A':'m')))}</td></tr>`).join('');
+
+  return verdict(d.ok,
+    'Every target met',
+    'Closest result below',
+    d.ok ? `found in ${d.sims_to_target} simulations`
+         : `${d.sims_used} simulations, no sizing satisfied all constraints`)
+  + `<section><h2>Specification</h2>
+      <table><thead><tr><th>metric</th><th>target</th><th>measured</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <p class="note">Rows marked <span class="tag">implied</span> were added
+      for you. Ask only for gain and bandwidth and you still need stability and
+      an output that sits off the rails — without them an optimizer returns
+      something that meets your request and is not an amplifier.</p>
+    </section>
+    <section><h2>Topology chosen — ${esc(d.resolved)}</h2>
+      <p style="color:var(--ink-soft);font-size:14.5px;margin:0 0 16px">${esc(d.how)}</p>
+      <figure>${d.symbol_svg}</figure></section>
+    ${d.bode_svg ? `<section><h2>Frequency response — 501 simulated points</h2>
+      <figure>${d.bode_svg}</figure></section>` : ''}
+    <section><h2>Sizing</h2><table><tbody>${sizing}</tbody></table></section>
+    <section><h2>Netlist</h2>
+      <details><summary>Show SPICE testbench</summary>
+      <pre>${esc(d.netlist)}</pre></details></section>`;
+}
+
+boot();
+</script>
+</body>
+</html>
