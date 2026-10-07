@@ -1,0 +1,11 @@
+# render.com deployment. Point a new Blueprint at this repository.
+services:
+  - type: web
+    name: bias-circuits
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/catalogue
+    envVars:
+      - key: PORT
+        value: 8010

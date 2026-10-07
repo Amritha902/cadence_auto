@@ -19,16 +19,24 @@ die() { echo "error: $*" >&2; exit 1; }
 command -v git >/dev/null || die "git is required"
 
 case "$TARGET" in
-  sky130)
+  sky130|sky130-minimal)
     DEST="$PDK_DIR/sky130"
     if [ -d "$DEST/.git" ]; then
       echo "sky130 already fetched at $DEST"
       exit 0
     fi
-    echo "Fetching SkyWater 130nm primitive models (shallow clone, ~200MB)..."
+    # bias instantiates exactly two devices, so the default is to fetch only
+    # those. The full primitive library is ~770MB; the two cells it actually
+    # uses are under 2MB, which is the difference between a deployable image
+    # and an undeployable one.
+    if [ "$TARGET" = "sky130" ]; then
+      SPARSE="cells/nfet_01v8 cells/pfet_01v8"
+      echo "Fetching the two sky130 primitives bias uses (~2MB)..."
+      echo "For the whole primitive library instead: $0 sky130-full"
+    fi
     git clone --depth 1 --filter=blob:none --sparse \
       https://github.com/google/skywater-pdk-libs-sky130_fd_pr.git "$DEST"
-    git -C "$DEST" sparse-checkout set models cells
+    git -C "$DEST" sparse-checkout set $SPARSE
     echo
     echo "Fetched to $DEST (~780MB)"
     echo
@@ -42,6 +50,19 @@ case "$TARGET" in
     echo "pdks/sky130_nominal.spice (tracked in this repo) defines the"
     echo "statistical slope parameters the tt models reference but nothing"
     echo "here defines. Zero is the nominal corner."
+    ;;
+
+  sky130-full)
+    DEST="$PDK_DIR/sky130"
+    if [ -d "$DEST/.git" ]; then
+      echo "sky130 already fetched at $DEST"
+      exit 0
+    fi
+    echo "Fetching the full SkyWater primitive library (~770MB)..."
+    git clone --depth 1 --filter=blob:none --sparse \
+      https://github.com/google/skywater-pdk-libs-sky130_fd_pr.git "$DEST"
+    git -C "$DEST" sparse-checkout set models cells
+    echo "Fetched to $DEST"
     ;;
 
   ihp|ihp-sg13g2)
@@ -70,11 +91,11 @@ case "$TARGET" in
     ;;
 
   "")
-    die "usage: $0 {sky130|ihp-sg13g2}"
+    die "usage: $0 {sky130|sky130-full|ihp-sg13g2}"
     ;;
 
   *)
-    die "unknown PDK '$TARGET'; expected sky130 or ihp-sg13g2"
+    die "unknown PDK '$TARGET'; expected sky130, sky130-full or ihp-sg13g2"
     ;;
 esac
 

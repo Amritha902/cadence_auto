@@ -43,8 +43,11 @@ ALIASES: dict[str, str] = {
     "3 input nand": "nand3", "three input nand": "nand3", "nand3": "nand3",
     "nor": "nor2", "nor gate": "nor2",
     "3 input nor": "nor3", "three input nor": "nor3", "nor3": "nor3",
-    "and": "and2", "and gate": "and2",
-    "or": "or2", "or gate": "or2",
+    # No bare "and"/"or": they are ordinary English words that appear in
+    # almost every analog request ("60dB gain and 10MHz bandwidth"), and an
+    # alias table cannot tell the conjunction from the gate.
+    "and gate": "and2", "2 input and": "and2", "and2": "and2",
+    "or gate": "or2", "2 input or": "or2", "or2": "or2",
     "inverter": "inverter", "not gate": "inverter", "inv": "inverter",
     "buffer": "buffer", "buf": "buffer", "non inverting buffer": "buffer",
 
@@ -452,24 +455,30 @@ def build_any(
     """
     from . import specparse
 
-    try:
-        cell, _how = resolve(request, use_llm=False)
-    except LookupError:
-        cell = None
-
-    if cell:
-        sizing = kwargs.get("sizing")
-        return build(request, pdk, outdir=outdir, sizing=sizing, use_llm=use_llm)
-
+    # Analog is tested first, and the order matters. A specification carries
+    # units -- dB, Hz, watts -- and no logic cell ever does, so a successful
+    # parse is decisive. Resolving the cell name first instead lets a stray
+    # English word win: "60dB gain and 10MHz bandwidth" contains "and", and an
+    # alias table has no way to tell the conjunction from the gate. That is
+    # not hypothetical; it shipped, and routed every op-amp request to an AND
+    # gate until a container test caught it.
     try:
         specparse.parse(request)
-    except ValueError as exc:
+    except ValueError:
+        pass
+    else:
+        return size(
+            request, pdk, outdir=outdir, use_llm=use_llm,
+            **{k: v for k, v in kwargs.items() if k != "sizing"},
+        )
+
+    try:
+        cell, _how = resolve(request, use_llm=use_llm)
+    except LookupError as exc:
         raise LookupError(
-            f"{exc}\n\nOr name a logic cell: "
-            f"{', '.join(sorted(logic.CELLS))}"
+            f"{exc}\n\nFor an amplifier, give targets with units -- "
+            "for example: 60dB gain, 10MHz bandwidth, under 100uW"
         ) from exc
 
-    return size(
-        request, pdk, outdir=outdir, use_llm=use_llm,
-        **{k: v for k, v in kwargs.items() if k != "sizing"},
-    )
+    return build(request, pdk, outdir=outdir,
+                 sizing=kwargs.get("sizing"), use_llm=use_llm)

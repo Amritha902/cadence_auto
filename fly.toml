@@ -1,0 +1,19 @@
+# fly.io deployment.  Deploy with:  flyctl launch --copy-config --now
+app = "bias-circuits"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8010
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Scales to zero when idle, so an unvisited prototype costs nothing.
+  min_machines_running = 0
+
+[[vm]]
+  # Simulation is CPU-bound; 1GB is comfortable for the analog sizing loop.
+  size = "shared-cpu-1x"
+  memory = "1gb"

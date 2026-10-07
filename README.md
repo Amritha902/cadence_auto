@@ -241,14 +241,54 @@ web/run.sh          # http://localhost:8010
 ```
 
 The same engine behind a browser. Type a request, watch it build and simulate,
-read the result. Nothing is cached or precomputed — every page load that shows
-a truth table ran a transient, and every Bode plot is 501 points that came out
+read the result. Nothing is cached or precomputed — every page that shows a
+truth table ran a transient, and every Bode plot is 501 points that came out
 of ngspice during that request.
 
 It is deliberately honest about failure. An analog request that does not meet
 its spec says so and shows the closest result, because a tool that quietly
 returns a near miss is worse than one that admits it. Constraints added on
-your behalf are tagged `implied` rather than slipped in.
+your behalf are tagged `implied` rather than slipped in. A target beyond either
+topology is refused in zero simulations rather than after a long search.
+
+### Deploying it
+
+```bash
+docker build -t bias-circuits .
+docker run -p 8010:8010 bias-circuits
+```
+
+563MB image, builds in about 15 minutes cold and under a minute warm. ngspice
+is the only system dependency that matters, and it is why this needs a
+container rather than a static host.
+
+The build fetches **only the two sky130 primitives the circuits instantiate**,
+not the 770MB primitive library — the difference between a deployable image and
+an undeployable one. It then verifies a half adder against real foundry models
+*inside the image* and fails the build if that does not pass, so a broken
+simulator cannot ship.
+
+`fly.toml` and `render.yaml` are included:
+
+```bash
+flyctl launch --copy-config --now     # fly.io, scales to zero when idle
+```
+
+or point a Render Blueprint at the repository.
+
+### What routing taught me
+
+An early version resolved logic-cell names before parsing specifications. Since
+`and` was an alias for the AND gate, *"an op-amp with 40dB gain **and** 5MHz
+bandwidth"* was built as a six-transistor AND gate — and the collision test
+missed it entirely, because it only checked digital phrasings like "a NAND
+gate".
+
+Specifications are now tested first. A spec carries units — dB, Hz, watts — and
+no logic cell ever does, so a successful parse is decisive. The bare `and` and
+`or` aliases are gone; an alias table cannot tell a conjunction from a gate.
+
+It was a container test that caught it, not a unit test.
 
 
 ---

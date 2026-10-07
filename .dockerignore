@@ -1,0 +1,11 @@
+.venv/
+.git/
+.github/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+results/
+tests/
+# Fetched inside the image, not copied from the host.
+pdks/sky130/
+pdks/ihp-sg13g2/

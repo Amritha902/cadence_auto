@@ -223,3 +223,58 @@ class TestTopologyFallback:
         )
         assert result.topology_name == "ota5t"
         assert "reached only" not in result.why_topology
+
+
+class TestRouting:
+    """Which half of the tool a request goes to.
+
+    This exists because of a real shipped bug. "and" was an alias for the AND
+    gate, build_any resolved cell names before parsing specifications, and so
+    "an op-amp with 40dB gain and 5MHz bandwidth" was built as a 6-transistor
+    AND gate. The earlier collision test only checked digital phrasings, so it
+    passed throughout.
+    """
+
+    @staticmethod
+    def _route(text: str) -> str:
+        from bias import specparse
+
+        try:
+            specparse.parse(text)
+        except ValueError:
+            return "digital"
+        return "analog"
+
+    @pytest.mark.parametrize("text", [
+        "an op-amp with 40dB gain and 5MHz bandwidth under 200uW",
+        "60dB gain and 10MHz bandwidth",
+        "amplifier with 50dB gain and a 2pF load",
+        "45dB gain or better, 10MHz bandwidth",
+    ])
+    def test_analog_prose_containing_and_or_stays_analog(self, text):
+        assert self._route(text) == "analog"
+
+    @pytest.mark.parametrize("text", [
+        "a half adder", "an and gate", "a NAND gate", "an or gate",
+        "a 2:1 multiplexer", "an inverter", "a 2 bit adder",
+    ])
+    def test_logic_requests_stay_digital(self, text):
+        assert self._route(text) == "digital"
+
+    def test_bare_and_or_are_not_aliases(self):
+        """They are ordinary English; only the explicit gate names resolve."""
+        assert "and" not in design.ALIASES
+        assert "or" not in design.ALIASES
+        assert design.ALIASES["and gate"] == "and2"
+        assert design.ALIASES["or gate"] == "or2"
+
+    @pytest.mark.needs_ngspice
+    def test_build_any_routes_an_amplifier_to_the_analog_path(self):
+        from bias import pdk
+
+        result = design.build_any(
+            "an op-amp with 40dB gain and 5MHz bandwidth under 300uW, 1pF load",
+            pdk.DEV180, use_llm=False, budget=250, attempts=1,
+        )
+        assert hasattr(result, "topology_name"), "routed to the logic path"
+        assert result.topology_name in ("ota5t", "miller")
