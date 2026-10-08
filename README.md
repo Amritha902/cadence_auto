@@ -23,6 +23,13 @@ cloud.
 
 ---
 
+## Manual
+
+A full manual -- running it, hosting it, troubleshooting, and where to take it
+next -- is in [docs/MANUAL.md](docs/MANUAL.md), with a PDF at
+[Cadence-Auto-Manual.pdf](Cadence-Auto-Manual.pdf). Regenerate it with
+`python scripts/make_manual.py`.
+
 ## Quickstart
 
 ```bash

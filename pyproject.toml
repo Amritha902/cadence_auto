@@ -13,6 +13,7 @@ llm = ["anthropic>=0.40"]
 opt = ["scipy>=1.11"]
 dev = ["pytest>=8.0"]
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+docs = ["reportlab>=4.0"]
 
 [project.scripts]
 bias = "bias.cli:main"
